@@ -1,0 +1,330 @@
+from kivy.metrics import dp
+from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.scrollview import ScrollView
+from kivymd.app import MDApp
+from kivymd.uix.button import MDIconButton, MDRaisedButton
+from kivymd.uix.label import MDLabel
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.card import MDCard
+from kivymd.uix.gridlayout import MDGridLayout
+from kivymd.uix.textfield import MDTextField
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+
+class MedicalHistoryApp(MDApp):
+    def build(self):
+        self.theme_cls.primary_palette = "Purple"
+        self.theme_cls.primary_hue = "500"
+        self.screen_manager = ScreenManager()
+
+        # Create main screen
+        self.main_screen = Screen(name='main')
+        self.main_screen.add_widget(self.create_main_layout())
+        self.screen_manager.add_widget(self.main_screen)
+
+        # Create form screen
+        self.form_screen = Screen(name='medical_form')
+        self.form_screen.add_widget(self.create_form_layout())
+        self.screen_manager.add_widget(self.form_screen)
+
+        # Create prediction screen
+        self.prediction_screen = Screen(name='prediction_form')
+        self.prediction_screen.add_widget(self.create_prediction_layout())
+        self.screen_manager.add_widget(self.prediction_screen)
+
+        return self.screen_manager
+
+    def create_main_layout(self):
+        main_layout = MDBoxLayout(orientation='vertical')
+
+        # Top section with CareLog, search button, and alarm symbol
+        top_section = MDBoxLayout(padding=dp(16), size_hint=(1, 0.1), md_bg_color=self.theme_cls.primary_color)
+        top_section.add_widget(MDLabel(text="CareLog", halign="left", font_style="Subtitle1", size_hint_x=0.2))
+        top_section.add_widget(MDIconButton(icon="magnify", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        top_section.add_widget(MDIconButton(icon="bell-outline", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+
+        # Weather report section (sample content)
+        weather_report = MDCard(
+            orientation="vertical",
+            padding=dp(16),
+            size_hint=(1, 0.2),
+            md_bg_color=(1, 1, 1, 1)
+        )
+        weather_report.add_widget(MDLabel(text="Weather Report", font_style="Subtitle1"))
+        weather_report.add_widget(MDLabel(text="Sunny, 25°C", font_style="Body2"))
+
+        # Buttons section (CPR, Electric shock, Burns, Bleeding)
+        buttons_layout = MDBoxLayout(orientation="vertical", padding=dp(16), spacing=dp(16), size_hint_y=0.3)
+        cpr_button = MDRaisedButton(text="CPR", size_hint=(None, None), size=(dp(120), dp(48)))
+        electric_shock_button = MDRaisedButton(text="Electric shock", size_hint=(None, None), size=(dp(120), dp(48)))
+        burns_button = MDRaisedButton(text="Burns", size_hint=(None, None), size=(dp(120), dp(48)))
+        bleeding_button = MDRaisedButton(text="Bleeding", size_hint=(None, None), size=(dp(120), dp(48)))
+        buttons_layout.add_widget(cpr_button)
+        buttons_layout.add_widget(electric_shock_button)
+        buttons_layout.add_widget(burns_button)
+        buttons_layout.add_widget(bleeding_button)
+
+        # Bottom section with home, profile picture, scanner, + symbol, and diagnosis report symbols
+        bottom_section = MDBoxLayout(padding=dp(16), spacing=dp(16), size_hint=(1, 0.1), md_bg_color=self.theme_cls.primary_color)
+        profile_button = MDIconButton(icon="account-circle", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        home_button = MDIconButton(icon="home", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        scanner_button = MDIconButton(icon="qrcode-scan", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        plus_button = MDIconButton(icon="plus", theme_text_color="Custom", text_color=(1, 1, 1, 1), on_release=self.show_medical_form)
+        diagnosis_report_button = MDIconButton(icon="file-document-outline", theme_text_color="Custom", text_color=(1, 1, 1, 1), on_release=self.show_prediction_form)
+
+        bottom_section.add_widget(profile_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.2))  # Adjust spacing if needed
+        bottom_section.add_widget(home_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.2))  # Adjust spacing if needed
+        bottom_section.add_widget(scanner_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.2))  # Adjust spacing if needed
+        bottom_section.add_widget(plus_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.2))  # Adjust spacing if needed
+        bottom_section.add_widget(diagnosis_report_button)
+
+        main_layout.add_widget(top_section)
+        main_layout.add_widget(weather_report)
+        main_layout.add_widget(buttons_layout)
+        main_layout.add_widget(bottom_section)
+
+        return main_layout
+
+    def create_form_layout(self):
+        scroll_view = ScrollView()
+        layout = MDBoxLayout(orientation="vertical", adaptive_height=True, padding=dp(16), spacing=dp(16))
+
+        # Medical history form components
+        self.age_field = MDTextField(hint_text="Age", input_filter="int")
+        self.bp_field = MDTextField(hint_text="Blood Pressure (systolic/diastolic)")
+        self.bmi_field = MDTextField(hint_text="BMI", input_filter="float")
+        self.glucose_field = MDTextField(hint_text="Glucose", input_filter="float")
+
+        self.allergies_input = MDTextField(hint_text="Allergies")
+        self.chronic_diseases_input = MDTextField(hint_text="Chronic Diseases")
+
+        # Chronic diseases checkboxes and associated buttons
+        self.diabetes_label = MDLabel(text="Diabetes")
+        self.diabetes_buttons = MDGridLayout(cols=2, spacing=dp(10), size_hint_y=None, height=dp(48))
+        self.diabetes_yes_button = MDRaisedButton(text="Yes", on_release=self.on_diabetes_yes)
+        self.diabetes_no_button = MDRaisedButton(text="No", on_release=self.on_diabetes_no)
+        self.diabetes_buttons.add_widget(self.diabetes_yes_button)
+        self.diabetes_buttons.add_widget(self.diabetes_no_button)
+
+        self.cancer_label = MDLabel(text="Cancer")
+        self.cancer_buttons = MDGridLayout(cols=2, spacing=dp(10), size_hint_y=None, height=dp(48))
+        self.cancer_chemo_button = MDRaisedButton(text="Chemotherapy", on_release=self.on_cancer_chemo)
+        self.cancer_radio_button = MDRaisedButton(text="Radiotherapy", on_release=self.on_cancer_radio)
+        self.cancer_buttons.add_widget(self.cancer_chemo_button)
+        self.cancer_buttons.add_widget(self.cancer_radio_button)
+
+        self.bp_label = MDLabel(text="BP")
+        self.bp_buttons = MDGridLayout(cols=2, spacing=dp(10), size_hint_y=None, height=dp(48))
+        self.bp_high_button = MDRaisedButton(text="High", on_release=self.on_bp_high)
+        self.bp_low_button = MDRaisedButton(text="Low", on_release=self.on_bp_low)
+        self.bp_buttons.add_widget(self.bp_high_button)
+        self.bp_buttons.add_widget(self.bp_low_button)
+
+        self.neuro_label = MDLabel(text="Neurological Disorders")
+        self.neuro_buttons = MDGridLayout(cols=2, spacing=dp(10), size_hint_y=None, height=dp(48))
+        self.neuro_yes_button = MDRaisedButton(text="Yes", on_release=self.on_neuro_yes)
+        self.neuro_no_button = MDRaisedButton(text="No", on_release=self.on_neuro_no)
+        self.neuro_buttons.add_widget(self.neuro_yes_button)
+        self.neuro_buttons.add_widget(self.neuro_no_button)
+
+        self.respiratory_label = MDLabel(text="Respiratory Disorders")
+        self.respiratory_buttons = MDGridLayout(cols=2, spacing=dp(10), size_hint_y=None, height=dp(48))
+        self.respiratory_yes_button = MDRaisedButton(text="Yes", on_release=self.on_respiratory_yes)
+        self.respiratory_no_button = MDRaisedButton(text="No", on_release=self.on_respiratory_no)
+        self.respiratory_buttons.add_widget(self.respiratory_yes_button)
+        self.respiratory_buttons.add_widget(self.respiratory_no_button)
+
+        self.family_doctor_input = MDTextField(hint_text="Family Doctor")
+        self.doctor_phone_input = MDTextField(hint_text="Doctor Phone")
+        self.past_surgeries_input = MDTextField(hint_text="Past Surgeries")
+        self.smoker_input = MDTextField(hint_text="Smoker")
+        self.last_drink_input = MDTextField(hint_text="Last Drink")
+        self.cardiac_field = MDTextField(hint_text="Cardiac Arrest")
+
+        # Save button
+        self.save_button = MDRaisedButton(text="Save", on_release=self.save_form_data)
+
+        layout.add_widget(self.age_field)
+        layout.add_widget(self.bp_field)
+        layout.add_widget(self.bmi_field)
+        layout.add_widget(self.glucose_field)
+        layout.add_widget(self.allergies_input)
+        layout.add_widget(self.chronic_diseases_input)
+        layout.add_widget(self.diabetes_label)
+        layout.add_widget(self.diabetes_buttons)
+        layout.add_widget(self.cancer_label)
+        layout.add_widget(self.cancer_buttons)
+        layout.add_widget(self.bp_label)
+        layout.add_widget(self.bp_buttons)
+        layout.add_widget(self.neuro_label)
+        layout.add_widget(self.neuro_buttons)
+        layout.add_widget(self.respiratory_label)
+        layout.add_widget(self.respiratory_buttons)
+        layout.add_widget(self.family_doctor_input)
+        layout.add_widget(self.doctor_phone_input)
+        layout.add_widget(self.past_surgeries_input)
+        layout.add_widget(self.smoker_input)
+        layout.add_widget(self.last_drink_input)
+        layout.add_widget(self.cardiac_field)
+        layout.add_widget(self.save_button)
+
+        scroll_view.add_widget(layout)
+
+        main_layout = MDBoxLayout(orientation="vertical")
+        main_layout.add_widget(scroll_view)
+
+        return main_layout
+
+    def create_prediction_layout(self):
+        scroll_view = ScrollView()
+        layout = MDBoxLayout(orientation="vertical", adaptive_height=True, padding=dp(16), spacing=dp(16))
+
+        # Predict button at the top
+        self.predict_button = MDRaisedButton(text="Predict", size_hint=(1, None), height=dp(48), on_release=self.predict_disease)
+        layout.add_widget(self.predict_button)
+
+        # Prediction form components
+        self.age_field = MDTextField(hint_text="Age", input_filter="int")
+        self.bp_field = MDTextField(hint_text="Blood Pressure (systolic/diastolic)")
+        self.bmi_field = MDTextField(hint_text="BMI", input_filter="float")
+        self.glucose_field = MDTextField(hint_text="Glucose", input_filter="float")
+
+        layout.add_widget(self.age_field)
+        layout.add_widget(self.bp_field)
+        layout.add_widget(self.bmi_field)
+        layout.add_widget(self.glucose_field)
+
+        # Prediction result labels (initially empty)
+        self.predicted_disease_label = MDLabel(text="", font_style="Subtitle1")
+        self.prediction_accuracy_label = MDLabel(text="", font_style="Body2")
+
+        # Add labels to layout
+        layout.add_widget(self.predicted_disease_label)
+        layout.add_widget(self.prediction_accuracy_label)
+
+        scroll_view.add_widget(layout)
+
+        main_layout = MDBoxLayout(orientation="vertical")
+        main_layout.add_widget(scroll_view)
+
+        return main_layout
+
+    def predict_disease(self, instance):
+        try:
+            age_text = self.age_field.text
+            bp_text = self.bp_field.text
+            bmi_text = self.bmi_field.text
+            glucose_text = self.glucose_field.text
+
+            if not age_text or not bp_text or not bmi_text or not glucose_text:
+                print("Please fill in all fields.")
+                return
+
+            age = int(age_text)
+            blood_pressure = bp_text
+            bmi = float(bmi_text)
+            glucose = float(glucose_text)
+
+            systolic_bp, diastolic_bp = map(int, blood_pressure.split('/'))
+
+            # Prepare new data
+            new_data = [[age, systolic_bp, bmi, glucose]]
+            new_data_scaled = self.scaler.transform(new_data)
+
+            # Make prediction
+            predicted_disease = self.model.predict(new_data_scaled)
+            probability_disease = self.model.predict_proba(new_data_scaled)[0][1] * 100
+
+            self.predicted_disease_label.text = f"Predicted Disease: {'Diabetes' if predicted_disease[0] else 'No Diabetes'}"
+            self.prediction_accuracy_label.text = f"Prediction Accuracy: {probability_disease:.2f}%"
+
+        except ValueError as e:
+            print(f"Error: {e}. Please ensure all inputs are correctly filled.")
+
+    def save_form_data(self, instance):
+        # Implement saving form data logic here
+        pass
+
+    def show_medical_form(self, instance):
+        self.screen_manager.current = 'medical_form'
+
+    def show_prediction_form(self, instance):
+        self.screen_manager.current = 'prediction_form'
+
+    def on_diabetes_yes(self, instance):
+        self.diabetes_yes_button.md_bg_color = self.theme_cls.primary_color
+        self.diabetes_no_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_diabetes_no(self, instance):
+        self.diabetes_no_button.md_bg_color = self.theme_cls.primary_color
+        self.diabetes_yes_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_cancer_chemo(self, instance):
+        self.cancer_chemo_button.md_bg_color = self.theme_cls.primary_color
+        self.cancer_radio_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_cancer_radio(self, instance):
+        self.cancer_radio_button.md_bg_color = self.theme_cls.primary_color
+        self.cancer_chemo_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_bp_high(self, instance):
+        self.bp_high_button.md_bg_color = self.theme_cls.primary_color
+        self.bp_low_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_bp_low(self, instance):
+        self.bp_low_button.md_bg_color = self.theme_cls.primary_color
+        self.bp_high_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_neuro_yes(self, instance):
+        self.neuro_yes_button.md_bg_color = self.theme_cls.primary_color
+        self.neuro_no_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_neuro_no(self, instance):
+        self.neuro_no_button.md_bg_color = self.theme_cls.primary_color
+        self.neuro_yes_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_respiratory_yes(self, instance):
+        self.respiratory_yes_button.md_bg_color = self.theme_cls.primary_color
+        self.respiratory_no_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def on_respiratory_no(self, instance):
+        self.respiratory_no_button.md_bg_color = self.theme_cls.primary_color
+        self.respiratory_yes_button.md_bg_color = (0.5, 0.5, 0.5, 1)
+
+    def load_and_train_model(self):
+        # Load dataset
+        data = pd.read_csv(r'C:\Users\dhanyashree\OneDrive\Desktop\diabetes.csv')
+
+        # Preprocessing
+        X = data[['Age', 'BloodPressure', 'BMI', 'Glucose']]
+        y = data['Outcome']
+
+        # Fill missing values
+        X['BloodPressure'] = X['BloodPressure'].fillna(X['BloodPressure'].mean())
+        X['Glucose'] = X['Glucose'].fillna(X['Glucose'].mean())
+
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Standardization
+        self.scaler = StandardScaler()
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+
+        # Train model
+        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+        self.model.fit(X_train_scaled, y_train)
+
+    def on_start(self):
+        self.load_and_train_model()
+
+
+if __name__ == '__main__':
+    MedicalHistoryApp().run()

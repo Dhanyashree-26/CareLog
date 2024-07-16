@@ -1,0 +1,302 @@
+import os
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.applications import ResNet50
+from kivy.metrics import dp
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivymd.app import MDApp
+from kivymd.uix.button import MDIconButton, MDRaisedButton
+from kivymd.uix.filemanager import MDFileManager
+from kivymd.uix.label import MDLabel
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.card import MDCard
+from kivy.uix.anchorlayout import AnchorLayout
+import threading
+import collections  # Import collections module for Counter
+
+# First aid instructions dictionary
+first_aid_instructions = {
+    "FU-ringworm": [
+        "Clean the Area",
+        "Apply Antifungal Cream such as clotrimazole or terbinafine",
+        "Keep It Dry",
+        "Avoid Scratching",
+        "Maintain Hygiene"
+    ],
+    "BA-cellulitis": [
+        "Clean the Area",
+        "Apply an Antibiotic Ointment: Use an over-the-counter antibiotic ointment if recommended by a healthcare professional.",
+        "Elevate the Affected Limb",
+        "Keep the Area Covered",
+        "Seek Medical Attention"
+    ],
+    "BA-impetigo": [
+        "Clean the sores with mild soap and water.",
+        "Apply an over-the-counter antibiotic ointment.",
+        "Cover the sores with a sterile bandage.",
+        "Avoid touching or scratching the sores.",
+        "Wash hands frequently and avoid sharing personal items."
+    ],
+    "FU-athlete foot": [
+        "Keep feet clean and dry.",
+        "Apply antifungal cream or powder.",
+        "Wear clean socks made of breathable materials.",
+        "Avoid walking barefoot in public areas.",
+        "Change shoes regularly to allow them to dry completely."
+    ],
+    "FU-nail-fungus": [
+        "Trim and clean nails regularly.",
+        "Apply antifungal nail polish or cream.",
+        "Keep feet dry and avoid moisture.",
+        "Wear breathable socks and shoes.",
+        "Avoid sharing nail clippers or socks."
+    ],
+    "PA-cutaneous-larva-migrans": [
+        "Clean the affected area with soap and water.",
+        "Apply a topical anti-parasitic cream.",
+        "Avoid scratching the affected area.",
+        "Cover the area with a sterile bandage.",
+        "Seek medical attention for appropriate treatment."
+    ],
+    "VI-chickenpox": [
+        "Keep the skin clean and dry.",
+        "Apply calamine lotion to soothe itching.",
+        "Trim fingernails to prevent scratching.",
+        "Use acetaminophen for fever relief.",
+        "Avoid close contact with others to prevent spreading."
+    ],
+    "VI-shingles": [
+        "Keep the rash clean and dry.",
+        "Apply cool compresses to the affected area.",
+        "Use over-the-counter pain relief medications.",
+        "Avoid scratching or picking at the blisters.",
+        "Wear loose, comfortable clothing."
+    ]
+}
+
+class MainApp(MDApp):
+    def build(self):
+        self.theme_cls.primary_palette = "Purple"
+        self.theme_cls.primary_hue = "500"
+
+        self.file_manager = MDFileManager(
+            exit_manager=self.exit_manager,
+            select_path=self.select_path,
+        )
+
+        screen = MDBoxLayout(orientation='vertical', padding=dp(16), spacing=dp(16))
+
+        # Section for photo upload/scan
+        photo_section = AnchorLayout(size_hint_y=0.3)
+        self.photo_button = MDIconButton(icon="camera", size=(dp(64), dp(64)))
+        self.photo_button.bind(on_release=self.show_file_manager)
+        photo_section.add_widget(self.photo_button)
+
+        # Section for disease name and first aid instructions
+        self.details_card = MDCard(
+            size_hint_y=0.7,
+            md_bg_color=(1, 1, 1, 1)
+        )
+        self.details_layout = MDBoxLayout(orientation="vertical", padding=dp(16), spacing=dp(16))
+        self.disease_name_label = MDLabel(text="Disease Name", font_style="H5")
+        self.first_aid_instructions_label = MDLabel(
+            text="First Aid Instructions:",
+            font_style="Body1"
+        )
+        self.details_layout.add_widget(self.disease_name_label)
+        self.details_layout.add_widget(self.first_aid_instructions_label)
+        self.details_card.add_widget(self.details_layout)
+
+        # Back button
+        back_button = MDRaisedButton(text="Back", on_release=self.clear_details)
+        self.details_card.add_widget(back_button)
+
+        # Add widgets to the screen
+        screen.add_widget(photo_section)
+        screen.add_widget(self.details_card)
+
+        return screen
+
+    def show_file_manager(self, *args):
+        self.file_manager.show('/')  # Start with root directory
+
+    def select_path(self, path):
+        self.file_manager.close()
+        # Predict disease from the selected image path
+        if hasattr(self, 'model') and self.model and self.training_completed:
+            self.predict_image(path)
+        else:
+            print("Model is not ready yet or training is incomplete. Please wait for training to finish.")
+
+    def exit_manager(self, *args):
+        self.file_manager.close()
+
+    def predict_image(self, image_path):
+        try:
+            # Load and preprocess the image
+            image = load_img(image_path, target_size=(224, 224))
+            image_array = img_to_array(image)
+            image_array = np.expand_dims(image_array, axis=0)
+            image_array = image_array / 255.0  # Normalize
+
+            # Predict using the loaded model
+            predictions = self.model.predict(image_array)
+
+            # Debug output: Show predictions
+            print(f"Predictions: {predictions}")
+
+            # Map the predictions to class names
+            class_indices = {v: k for k, v in self.class_indices.items()}
+            predicted_class_index = np.argmax(predictions)
+            predicted_class = class_indices[predicted_class_index]
+
+            print(f"Predicted class index: {predicted_class_index}")
+            print(f"Predicted class: {predicted_class}")
+
+            # Update UI with predicted disease and first aid instructions
+            self.update_ui(predicted_class)
+
+        except FileNotFoundError:
+            print(f"Error predicting image: File not found - {image_path}")
+            # Display an error message or handle it gracefully in the UI
+
+        except Exception as e:
+            print(f"Error predicting image: {str(e)}")
+            # Display an error message or handle it gracefully in the UI
+
+    def update_ui(self, predicted_class):
+        # This method updates the UI with predicted disease and instructions
+        print(f"Updating UI for class: {predicted_class}")
+        self.disease_name_label.text = f"Disease Name: {predicted_class}"
+        self.first_aid_instructions_label.text = "First Aid Instructions:\n"
+        instructions = first_aid_instructions.get(predicted_class, [])
+        if not instructions:
+            print(f"No instructions found for {predicted_class}")
+        for instruction in instructions:
+            self.first_aid_instructions_label.text += f"• {instruction}\n"
+
+    def clear_details(self, *args):
+        self.disease_name_label.text = "Disease Name"
+        self.first_aid_instructions_label.text = "First Aid Instructions:"
+
+    def delete_saved_model(self):
+        try:
+            if os.path.exists('resnet50_skin_disease_model.keras'):
+                os.remove('resnet50_skin_disease_model.keras')
+                print("Saved model deleted.")
+            else:
+                print("No saved model found to delete.")
+        except Exception as e:
+            print(f"Error deleting saved model: {str(e)}")
+
+    def train_model(self):
+        try:
+            # Delete the saved model if it exists
+            self.delete_saved_model()
+
+            # Define directories for your dataset
+            train_dir = r'C:\Users\dhanyashree\Downloads\archive\skin-disease-datasaet\train_set'
+            validation_dir = r'C:\Users\dhanyashree\Downloads\archive\skin-disease-datasaet\test_set'
+
+            # Data Augmentation and Loading
+            train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+                rescale=1.0/255,
+                shear_range=0.2,
+                zoom_range=0.2,
+                rotation_range=40,
+                width_shift_range=0.2,
+                height_shift_range=0.2,
+                horizontal_flip=True,
+                fill_mode='nearest'
+            )
+
+            test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1.0/255)
+
+            self.train_generator = train_datagen.flow_from_directory(
+                train_dir,
+                target_size=(224, 224),
+                batch_size=32,
+                class_mode='categorical'
+            )
+
+            validation_generator = test_datagen.flow_from_directory(
+                validation_dir,
+                target_size=(224, 224),
+                batch_size=32,
+                class_mode='categorical'
+            )
+
+            # Save class indices
+            self.class_indices = self.train_generator.class_indices
+            np.save('class_indices.npy', self.class_indices)
+
+            # Print class distribution
+            class_counts = collections.Counter(self.train_generator.classes)
+            print("Class Distribution in Training Data:")
+            print(class_counts)
+
+            # Create a new ResNet50 model pre-trained on ImageNet
+            print("Creating new model...")
+            base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+            for layer in base_model.layers[-30:]:
+                layer.trainable = True
+
+            x = GlobalAveragePooling2D()(base_model.output)
+            x = Dense(512, activation='relu')(x)
+            x = Dropout(0.5)(x)
+            predictions = Dense(len(first_aid_instructions), activation='softmax')(x)
+
+            self.model = Model(inputs=base_model.input, outputs=predictions)
+
+            self.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+                               loss='categorical_crossentropy', metrics=['accuracy'])
+
+            # Train the model
+            self.model.fit(
+                self.train_generator,
+                epochs=50,  # Set epochs to 50
+                validation_data=validation_generator,
+                callbacks=[tf.keras.callbacks.ModelCheckpoint('resnet50_skin_disease_model.keras', save_best_only=True)]
+            )
+
+            # Save the model
+            self.model.save('resnet50_skin_disease_model.keras')
+
+            # Set training completed flag
+            self.training_completed = True
+            print("Training completed and model saved.")
+
+        except FileNotFoundError as fnf_error:
+            print(f"FileNotFoundError: {str(fnf_error)}")
+            # Handle file not found error during model loading or training
+            # Optionally, display an error message in the UI
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            # Display an error message or handle it gracefully in the UI if model loading or training fails
+
+    def load_model(self):
+        try:
+            if os.path.exists('resnet50_skin_disease_model.keras') and os.path.exists('class_indices.npy'):
+                self.model = tf.keras.models.load_model('resnet50_skin_disease_model.keras')
+                self.class_indices = np.load('class_indices.npy', allow_pickle=True).item()
+                self.training_completed = True
+                print("Model and class indices loaded successfully.")
+            else:
+                print("No saved model found. Starting training process.")
+                self.train_model()
+        except Exception as e:
+            print(f"Error loading model: {str(e)}")
+            self.train_model()
+
+    def on_start(self):
+        self.training_completed = False
+        threading.Thread(target=self.load_model).start()
+
+if __name__ == '__main__':
+    MainApp().run()

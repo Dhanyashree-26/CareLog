@@ -1,0 +1,276 @@
+from kivymd.app import MDApp
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.image import AsyncImage
+from kivymd.uix.label import MDLabel
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.button import MDRaisedButton, MDIconButton, MDFlatButton
+from kivymd.uix.card import MDCard
+from kivy.metrics import dp
+from kivymd.uix.textfield import MDTextField
+from kivymd.uix.selectioncontrol import MDCheckbox
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.filemanager import MDFileManager
+from kivy.clock import Clock
+
+screen_helper = """
+ScreenManager:
+    LogoScreen:
+    FormScreen:
+    MenScreen:
+    WomenScreen:
+    ChildrenScreen:
+"""
+
+class LogoScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_widget(AsyncImage(source=r'C:\Users\dhanyashree\OneDrive\Desktop\logo.png'))
+        #self.add_widget(MDLabel(halign="center", font_style="H5", text="Logo Screen"))
+        Clock.schedule_once(self.switch_to_form, 5)
+
+    def switch_to_form(self, dt):
+        self.manager.current = 'form'
+
+class FormScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.build_form()
+
+    def build_form(self):
+        layout = MDBoxLayout(orientation='vertical', padding=40, spacing=30)
+        layout.add_widget(MDLabel(text='Personal Information', halign='center', font_style='H5'))
+
+        profile_layout = MDBoxLayout(orientation='horizontal', spacing=20)
+        self.profile_image = MDIconButton(icon='account-circle-outline', on_press=self.open_file_manager)
+        profile_layout.add_widget(self.profile_image)
+        profile_layout.add_widget(MDLabel(text='Add Profile Picture'))
+        layout.add_widget(profile_layout)
+
+        name_age_layout = MDBoxLayout(orientation='horizontal', spacing=20)
+        self.name_field = MDTextField(hint_text='Enter your Name', required=True)
+        self.age_field = MDTextField(hint_text='Enter your Age', input_type='number', required=True)
+        name_age_layout.add_widget(self.name_field)
+        name_age_layout.add_widget(self.age_field)
+        layout.add_widget(name_age_layout)
+
+        dob_layout = MDBoxLayout(orientation='horizontal', spacing=20)
+        self.dob_field = MDTextField(hint_text='Select your Date of Birth (YYYY-MM-DD)', required=True)
+        dob_layout.add_widget(self.dob_field)
+        layout.add_widget(dob_layout)
+
+        gender_layout = MDBoxLayout(orientation='horizontal', spacing=20)
+        gender_layout.add_widget(MDLabel(text='Gender'))
+        self.gender_male = MDCheckbox(active=False, size_hint=(None, None))
+        self.gender_male.bind(active=self.on_checkbox_active)
+        gender_layout.add_widget(self.gender_male)
+        gender_layout.add_widget(MDLabel(text='Male'))
+        self.gender_female = MDCheckbox(active=False, size_hint=(None, None))
+        self.gender_female.bind(active=self.on_checkbox_active)
+        gender_layout.add_widget(self.gender_female)
+        gender_layout.add_widget(MDLabel(text='Female'))
+        self.gender_children = MDCheckbox(active=False, size_hint=(None, None))
+        self.gender_children.bind(active=self.on_checkbox_active)
+        gender_layout.add_widget(self.gender_children)
+        gender_layout.add_widget(MDLabel(text='Children'))
+        layout.add_widget(gender_layout)
+
+        layout.add_widget(MDLabel(text='Emergency Phone Numbers', halign='center', font_style='H5'))
+        self.add_phone_number_field('+91', 'Mobile', layout)
+        self.add_phone_number_field('+91', 'Home', layout)
+
+        layout.add_widget(MDRaisedButton(text='Submit', on_press=self.show_dialog))
+        self.add_widget(layout)
+
+    def on_checkbox_active(self, checkbox, value):
+        if checkbox == self.gender_male and value:
+            self.gender_female.active = False
+            self.gender_children.active = False
+        elif checkbox == self.gender_female and value:
+            self.gender_male.active = False
+            self.gender_children.active = False
+        elif checkbox == self.gender_children and value:
+            self.gender_male.active = False
+            self.gender_female.active = False
+
+    def add_phone_number_field(self, code, type, layout):
+        phone_layout = MDBoxLayout(orientation='horizontal', spacing=20)
+        phone_layout.add_widget(MDLabel(text=f'{type} Number'))
+        phone_layout.add_widget(MDTextField(hint_text='Enter your phone number', required=True))
+        layout.add_widget(phone_layout)
+
+    def show_dialog(self, instance):
+        if self.validate_input():
+            if self.gender_male.active:
+                self.manager.current = 'men'
+            elif self.gender_female.active:
+                self.manager.current = 'women'
+            elif self.gender_children.active:
+                self.manager.current = 'children'
+        else:
+            dialog = MDDialog(
+                title='Submission',
+                text='Please fill out all fields correctly.',
+                size_hint=(.5, None),
+                height=200,
+                buttons=[MDFlatButton(text='Close', on_release=self.close_dialog)]
+            )
+            dialog.open()
+
+    def close_dialog(self, instance):
+        instance.parent.parent.parent.dismiss()
+
+    def validate_input(self):
+        name = self.name_field.text
+        age = self.age_field.text
+        dob = self.dob_field.text
+        if not name or not age or not dob:
+            return False
+        try:
+            int(age)
+            if not (self.gender_male.active or self.gender_female.active or self.gender_children.active):
+                return False
+            return True
+        except ValueError:
+            return False
+
+    def open_file_manager(self, instance):
+        file_manager = MDFileManager()
+        file_manager.show('/')
+        file_manager.select_path = self.select_path
+
+    def select_path(self, path):
+        self.profile_image.icon = path
+
+class MenScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.build_screen()
+
+    def build_screen(self):
+        screen = MDBoxLayout(orientation='vertical')
+        top_section = MDBoxLayout(padding=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        top_section.add_widget(MDLabel(text="CareLog", halign="left", font_style="Subtitle1", size_hint_x=0.2))
+        top_section.add_widget(MDIconButton(icon="magnify", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        top_section.add_widget(MDIconButton(icon="bell-outline", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        weather_report = MDCard(orientation="vertical", padding=dp(16), size_hint=(1, 0.2), md_bg_color=(1, 1, 1, 1))
+        weather_report.add_widget(MDLabel(text="Weather Report", font_style="Subtitle1"))
+        weather_report.add_widget(MDLabel(text="Sunny, 25°C", font_style="Body2"))
+        buttons_layout = MDBoxLayout(orientation="vertical", padding=dp(16), spacing=dp(16), size_hint_y=0.3)
+        buttons_layout.add_widget(MDRaisedButton(text="CPR", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Electric shock", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Burns", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Bleeding", size_hint=(None, None), size=(dp(120), dp(48))))
+        bottom_section = MDBoxLayout(padding=dp(16), spacing=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        scanner_button = MDIconButton(icon="qrcode-scan", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        home_button = MDIconButton(icon="home", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        profile_button = MDIconButton(icon="account-circle", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        diagnosis_button = MDIconButton(icon="file-document", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        plus_button = MDIconButton(icon="plus", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        bottom_section.add_widget(profile_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(home_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(scanner_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(diagnosis_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(plus_button)
+        screen.add_widget(top_section)
+        screen.add_widget(weather_report)
+        screen.add_widget(buttons_layout)
+        screen.add_widget(bottom_section)
+        self.add_widget(screen)
+
+class WomenScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.build_screen()
+
+    def build_screen(self):
+        screen = MDBoxLayout(orientation='vertical')
+        top_section = MDBoxLayout(padding=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        top_section.add_widget(MDLabel(text="CareLog", halign="left", font_style="Subtitle1", size_hint_x=0.2))
+        top_section.add_widget(MDIconButton(icon="magnify", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        top_section.add_widget(MDIconButton(icon="bell-outline", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        weather_report = MDCard(orientation="vertical", padding=dp(16), size_hint=(1, 0.2), md_bg_color=(1, 1, 1, 1))
+        weather_report.add_widget(MDLabel(text="Weather Report", font_style="Subtitle1"))
+        weather_report.add_widget(MDLabel(text="Sunny, 25°C", font_style="Body2"))
+        buttons_layout = MDBoxLayout(orientation="vertical", padding=dp(16), spacing=dp(16), size_hint_y=0.3)
+        buttons_layout.add_widget(MDRaisedButton(text="CPR", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Electric shock", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Burns", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Bleeding", size_hint=(None, None), size=(dp(120), dp(48))))
+        bottom_section = MDBoxLayout(padding=dp(16), spacing=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        scanner_button = MDIconButton(icon="qrcode-scan", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        home_button = MDIconButton(icon="home", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        profile_button = MDIconButton(icon="account-circle", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        diagnosis_button = MDIconButton(icon="file-document", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        plus_button = MDIconButton(icon="plus", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        bottom_section.add_widget(profile_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(home_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(scanner_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(diagnosis_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(plus_button)
+        screen.add_widget(top_section)
+        screen.add_widget(weather_report)
+        screen.add_widget(buttons_layout)
+        screen.add_widget(bottom_section)
+        self.add_widget(screen)
+
+class ChildrenScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.build_screen()
+
+    def build_screen(self):
+        screen = MDBoxLayout(orientation='vertical')
+        top_section = MDBoxLayout(padding=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        top_section.add_widget(MDLabel(text="CareLog", halign="left", font_style="Subtitle1", size_hint_x=0.2))
+        top_section.add_widget(MDIconButton(icon="magnify", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        top_section.add_widget(MDIconButton(icon="bell-outline", theme_text_color="Custom", text_color=(1, 1, 1, 1)))
+        weather_report = MDCard(orientation="vertical", padding=dp(16), size_hint=(1, 0.2), md_bg_color=(1, 1, 1, 1))
+        weather_report.add_widget(MDLabel(text="Weather Report", font_style="Subtitle1"))
+        weather_report.add_widget(MDLabel(text="Sunny, 25°C", font_style="Body2"))
+        buttons_layout = MDBoxLayout(orientation="vertical", padding=dp(16), spacing=dp(16), size_hint_y=0.3)
+        buttons_layout.add_widget(MDRaisedButton(text="CPR", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Electric shock", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Burns", size_hint=(None, None), size=(dp(120), dp(48))))
+        buttons_layout.add_widget(MDRaisedButton(text="Bleeding", size_hint=(None, None), size=(dp(120), dp(48))))
+        bottom_section = MDBoxLayout(padding=dp(16), spacing=dp(16), size_hint=(1, 0.1), md_bg_color=(0, 0.447, 0.737, 1))
+        scanner_button = MDIconButton(icon="qrcode-scan", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        home_button = MDIconButton(icon="home", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        profile_button = MDIconButton(icon="account-circle", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        diagnosis_button = MDIconButton(icon="file-document", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        plus_button = MDIconButton(icon="plus", theme_text_color="Custom", text_color=(1, 1, 1, 1))
+        bottom_section.add_widget(profile_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(home_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(scanner_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(diagnosis_button)
+        bottom_section.add_widget(MDBoxLayout(size_hint_x=0.5))
+        bottom_section.add_widget(plus_button)
+        screen.add_widget(top_section)
+        screen.add_widget(weather_report)
+        screen.add_widget(buttons_layout)
+        screen.add_widget(bottom_section)
+        self.add_widget(screen)
+
+class DemoApp(MDApp):
+    def build(self):
+        self.theme_cls.theme_style = "Light"
+        self.theme_cls.primary_palette = "Blue"
+        screen_manager = ScreenManager()
+        screen_manager.add_widget(LogoScreen(name='logo'))
+        screen_manager.add_widget(FormScreen(name='form'))
+        screen_manager.add_widget(MenScreen(name='men'))
+        screen_manager.add_widget(WomenScreen(name='women'))
+        screen_manager.add_widget(ChildrenScreen(name='children'))
+        return screen_manager
+
+DemoApp().run()
